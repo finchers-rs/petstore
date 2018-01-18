@@ -1,9 +1,9 @@
-#![allow(dead_code)]
+use std::fmt;
+use std::error::Error as StdError;
 
 use finchers::Endpoint;
 use finchers::endpoint::{body, ok, path};
 use finchers::endpoint::method::{delete, get, post, put};
-use finchers::errors;
 
 use finchers::contrib::json::Json;
 use finchers::contrib::urlencoded::{self, queries_opt, Form, FromUrlEncoded};
@@ -103,90 +103,72 @@ impl FromUrlEncoded for UpdatePetParam {
 
 #[derive(Debug)]
 pub enum EndpointError {
-    ExtractIdError(errors::ExtractPathError<u64>),
-    ExtractPathError(errors::ExtractPathError<String>),
-    BodyOrderError(errors::BodyError<Json<Order>>),
-    BodyUserError(errors::BodyError<Json<User>>),
-    BodyUserSeqError(errors::BodyError<Json<Vec<User>>>),
-    BodyPetError(errors::BodyError<Json<Pet>>),
-    BodyUpdatePetParamError(errors::BodyError<Form<UpdatePetParam>>),
-    ParseQueryError(urlencoded::UrlDecodeError),
+    FromFramework(Box<StdError + 'static>),
     MissingQuery,
 }
 
-use std::fmt;
-use std::error;
+impl EndpointError {
+    pub fn from<E: StdError + 'static>(err: E) -> Self {
+        EndpointError::FromFramework(Box::new(err))
+    }
+}
 
 impl fmt::Display for EndpointError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            ExtractIdError(ref e) => e.fmt(f),
-            ExtractPathError(ref e) => e.fmt(f),
-            BodyOrderError(ref e) => e.fmt(f),
-            BodyUserError(ref e) => e.fmt(f),
-            BodyUserSeqError(ref e) => e.fmt(f),
-            BodyPetError(ref e) => e.fmt(f),
-            BodyUpdatePetParamError(ref e) => e.fmt(f),
-            ParseQueryError(ref e) => e.fmt(f),
-            MissingQuery => f.write_str("missing query"),
+            EndpointError::FromFramework(ref e) => e.fmt(f),
+            EndpointError::MissingQuery => f.write_str("missing query string"),
         }
     }
 }
 
-impl error::Error for EndpointError {
+impl StdError for EndpointError {
     fn description(&self) -> &str {
         "during parsing incoming HTTP request"
     }
 
-    fn cause(&self) -> Option<&error::Error> {
+    fn cause(&self) -> Option<&StdError> {
         match *self {
-            ExtractIdError(ref e) => Some(e),
-            ExtractPathError(ref e) => Some(e),
-            BodyOrderError(ref e) => Some(e),
-            BodyUserError(ref e) => Some(e),
-            BodyUserSeqError(ref e) => Some(e),
-            BodyPetError(ref e) => Some(e),
-            BodyUpdatePetParamError(ref e) => Some(e),
-            ParseQueryError(ref e) => Some(e),
-            MissingQuery => None,
+            EndpointError::FromFramework(ref e) => Some(&**e),
+            _ => None,
         }
     }
 }
 
 pub use self::Request::*;
-pub use self::EndpointError::*;
+
 
 pub fn petstore_endpoint() -> impl Endpoint<Item = Request, Error = EndpointError> + 'static {
     // TODO: upload image
     let pets = endpoint![
         get("pet")
-            .with(path().map_err(ExtractIdError))
+            .with(path().map_err(EndpointError::from))
             .map(|id| GetPet(id)),
         post("pet")
-            .with(body().map_err(BodyPetError))
+            .with(body().map_err(EndpointError::from))
             .map(|Json(pet)| AddPet(pet)),
         put("pet")
-            .with(body().map_err(BodyPetError))
+            .with(body().map_err(EndpointError::from))
             .map(|Json(pet)| UpdatePet(pet)),
         delete("pet")
-            .with(path().map_err(ExtractIdError))
+            .with(path().map_err(EndpointError::from))
             .map(|id| DeletePet(id)),
         get("pet/findByStatus")
-            .with(queries_opt().map_err(ParseQueryError))
+            .with(queries_opt().map_err(EndpointError::from))
             .and_then(|res| match res {
                 Some(q) => Ok(FindPetsByStatuses(q)),
-                None => Err(MissingQuery),
+                None => Err(EndpointError::MissingQuery),
             }),
         get("pet/findByTags")
-            .with(queries_opt().map_err(ParseQueryError))
+            .with(queries_opt().map_err(EndpointError::from))
             .and_then(|res| match res {
                 Some(q) => Ok(FindPetsByTags(q)),
-                None => Err(MissingQuery),
+                None => Err(EndpointError::MissingQuery),
             }),
         post("pet")
             .with((
-                path().map_err(ExtractIdError),
-                body().map_err(BodyUpdatePetParamError),
+                path().map_err(EndpointError::from),
+                body().map_err(EndpointError::from),
             ))
             .map(|(id, Form(param))| UpdatePetViaForm(id, param))
     ];
@@ -194,34 +176,34 @@ pub fn petstore_endpoint() -> impl Endpoint<Item = Request, Error = EndpointErro
     let store = endpoint![
         get("store/inventory").with(ok(GetInventory)),
         post("store/order")
-            .with(body().map_err(BodyOrderError))
+            .with(body().map_err(EndpointError::from))
             .map(|Json(order)| AddOrder(order)),
         delete("store/order")
-            .with(path().map_err(ExtractIdError))
+            .with(path().map_err(EndpointError::from))
             .map(|id| DeleteOrder(id)),
         get("store/order")
-            .with(path().map_err(ExtractIdError))
+            .with(path().map_err(EndpointError::from))
             .map(|id| FindOrder(id)),
     ];
 
     let users = endpoint![
         post("user")
-            .with(body().map_err(BodyUserError))
+            .with(body().map_err(EndpointError::from))
             .map(|Json(u)| AddUser(u)),
         post("user/createWithList")
-            .with(body().map_err(BodyUserSeqError))
+            .with(body().map_err(EndpointError::from))
             .map(|Json(body)| AddUsersViaList(body)),
         post("user/createWithArray")
-            .with(body().map_err(BodyUserSeqError))
+            .with(body().map_err(EndpointError::from))
             .map(|Json(body)| AddUsersViaList(body)),
         delete("user")
-            .with(path().map_err(ExtractPathError))
+            .with(path().map_err(EndpointError::from))
             .map(|n| DeleteUser(n)),
         get("user")
-            .with(path().map_err(ExtractPathError))
+            .with(path().map_err(EndpointError::from))
             .map(|n| GetUser(n)),
         put("user")
-            .with(body().map_err(BodyUserError))
+            .with(body().map_err(EndpointError::from))
             .map(|Json(u)| UpdateUser(u)),
     ];
 
