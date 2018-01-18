@@ -15,7 +15,7 @@ pub enum Request {
     FindOrder(u64),
 }
 
-pub fn endpoint() -> impl Endpoint<Item = Request, Error = Error> + 'static {
+pub fn endpoint() -> impl Endpoint<Item = Request, Error = Error> + Clone + 'static {
     use self::Request::*;
 
     endpoint![

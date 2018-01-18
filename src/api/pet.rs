@@ -1,7 +1,5 @@
-use std::fmt;
-use std::error::Error as StdError;
 use finchers::contrib::json::Json;
-use finchers::contrib::urlencoded::{self, queries_opt, Form, FromUrlEncoded};
+use finchers::contrib::urlencoded::{self, queries_req, Form, FromUrlEncoded};
 use finchers::endpoint::{body, path, Endpoint};
 use finchers::endpoint::method::{delete, get, post, put};
 use finchers::handler::Handler;
@@ -88,31 +86,8 @@ impl FromUrlEncoded for UpdatePetParam {
     }
 }
 
-#[derive(Debug)]
-pub struct MissingQuery {
-    _priv: (),
-}
-
-impl MissingQuery {
-    pub fn new() -> Self {
-        MissingQuery { _priv: () }
-    }
-}
-
-impl fmt::Display for MissingQuery {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(self.description())
-    }
-}
-
-impl StdError for MissingQuery {
-    fn description(&self) -> &str {
-        "missing query string"
-    }
-}
-
 // TODO: upload image
-pub fn endpoint() -> impl Endpoint<Item = Request, Error = Error> + 'static {
+pub fn endpoint() -> impl Endpoint<Item = Request, Error = Error> + Clone + 'static {
     use self::Request::*;
 
     endpoint![
@@ -129,17 +104,11 @@ pub fn endpoint() -> impl Endpoint<Item = Request, Error = Error> + 'static {
             .with(path().map_err(Error::endpoint))
             .map(|id| DeletePet(id)),
         get("pet/findByStatus")
-            .with(queries_opt().map_err(Error::endpoint))
-            .and_then(|res| match res {
-                Some(q) => Ok(FindPetsByStatuses(q)),
-                None => Err(Error::endpoint(MissingQuery::new())),
-            }),
+            .with(queries_req().map_err(Error::endpoint))
+            .map(FindPetsByStatuses),
         get("pet/findByTags")
-            .with(queries_opt().map_err(Error::endpoint))
-            .and_then(|res| match res {
-                Some(q) => Ok(FindPetsByTags(q)),
-                None => Err(Error::endpoint(MissingQuery::new())),
-            }),
+            .with(queries_req().map_err(Error::endpoint))
+            .map(FindPetsByTags),
         post("pet")
             .with((
                 path().map_err(Error::endpoint),

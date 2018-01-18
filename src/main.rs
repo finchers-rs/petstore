@@ -16,7 +16,6 @@ mod model;
 
 use finchers::service::FinchersService;
 use finchers::responder::DefaultResponder;
-use std::rc::Rc;
 use futures::{Future, Stream};
 use hyper::server::{Http, NewService};
 use tokio_core::reactor::Core;
@@ -27,7 +26,7 @@ fn main() {
     let db = PetstoreDb::new();
 
     let service = FinchersService::new(
-        Rc::new(api::endpoint()),
+        api::endpoint(),
         api::Petstore::new(db),
         DefaultResponder::default(),
     );

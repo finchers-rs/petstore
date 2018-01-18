@@ -17,8 +17,9 @@ pub enum Request {
     UpdateUser(User),
 }
 
-pub fn endpoint() -> impl Endpoint<Item = Request, Error = Error> + 'static {
-    pub use self::Request::*;
+pub fn endpoint() -> impl Endpoint<Item = Request, Error = Error> + Clone + 'static {
+    use self::Request::*;
+
     endpoint![
         post("user")
             .with(body().map_err(Error::endpoint))

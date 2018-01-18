@@ -18,7 +18,7 @@ pub enum Request {
     User(user::Request),
 }
 
-pub fn endpoint() -> impl Endpoint<Item = Request, Error = Error> + 'static {
+pub fn endpoint() -> impl Endpoint<Item = Request, Error = Error> + Clone + 'static {
     endpoint![
         pet::endpoint().map(Request::Pet),
         store::endpoint().map(Request::Store),
