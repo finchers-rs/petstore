@@ -4,7 +4,7 @@ version = "0.0.0"
 authors = ["Yusuke Sasaki <yusuke.sasaki.nuem@gmail.com>"]
 
 [dependencies]
-finchers = { path = "../finchers" }
+finchers = { git = "https://github.com/finchers-rs/finchers.git" }
 
 futures = "0.1"
 serde = "1.0"
