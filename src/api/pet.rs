@@ -1,38 +1,14 @@
 use std::fmt;
 use std::error::Error as StdError;
-
-use finchers::Endpoint;
-use finchers::endpoint::{body, ok, path};
-use finchers::endpoint::method::{delete, get, post, put};
-
 use finchers::contrib::json::Json;
 use finchers::contrib::urlencoded::{self, queries_opt, Form, FromUrlEncoded};
+use finchers::endpoint::{body, path, Endpoint};
+use finchers::endpoint::method::{delete, get, post, put};
+use finchers::handler::Handler;
+use futures::Future;
 
-use model::*;
-use error::Error;
-
-#[derive(Debug)]
-pub struct MissingQuery {
-    _priv: (),
-}
-
-impl MissingQuery {
-    pub fn new() -> Self {
-        MissingQuery { _priv: () }
-    }
-}
-
-impl fmt::Display for MissingQuery {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(self.description())
-    }
-}
-
-impl StdError for MissingQuery {
-    fn description(&self) -> &str {
-        "missing query string"
-    }
-}
+use model::{Pet, Status};
+use super::{Error, Petstore};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Request {
@@ -43,19 +19,6 @@ pub enum Request {
     FindPetsByStatuses(FindPetsByStatusesParam),
     FindPetsByTags(FindPetsByTagsParam),
     UpdatePetViaForm(u64, UpdatePetParam),
-
-    // store APIs
-    GetInventory,
-    AddOrder(Order),
-    DeleteOrder(u64),
-    FindOrder(u64),
-
-    // users APIs
-    AddUser(User),
-    AddUsersViaList(Vec<User>),
-    DeleteUser(String),
-    GetUser(String),
-    UpdateUser(User),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -125,11 +88,34 @@ impl FromUrlEncoded for UpdatePetParam {
     }
 }
 
-pub use self::Request::*;
+#[derive(Debug)]
+pub struct MissingQuery {
+    _priv: (),
+}
 
-pub fn petstore_endpoint() -> impl Endpoint<Item = Request, Error = Error> + 'static {
-    // TODO: upload image
-    let pets = endpoint![
+impl MissingQuery {
+    pub fn new() -> Self {
+        MissingQuery { _priv: () }
+    }
+}
+
+impl fmt::Display for MissingQuery {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(self.description())
+    }
+}
+
+impl StdError for MissingQuery {
+    fn description(&self) -> &str {
+        "missing query string"
+    }
+}
+
+// TODO: upload image
+pub fn endpoint() -> impl Endpoint<Item = Request, Error = Error> + 'static {
+    use self::Request::*;
+
+    endpoint![
         get("pet")
             .with(path().map_err(Error::endpoint))
             .map(|id| GetPet(id)),
@@ -160,57 +146,47 @@ pub fn petstore_endpoint() -> impl Endpoint<Item = Request, Error = Error> + 'st
                 body().map_err(Error::endpoint),
             ))
             .map(|(id, Form(param))| UpdatePetViaForm(id, param))
-    ];
+    ]
+}
 
-    let store = endpoint![
-        get("store/inventory").with(ok(GetInventory)),
-        post("store/order")
-            .with(body().map_err(Error::endpoint))
-            .map(|Json(order)| AddOrder(order)),
-        delete("store/order")
-            .with(path().map_err(Error::endpoint))
-            .map(|id| DeleteOrder(id)),
-        get("store/order")
-            .with(path().map_err(Error::endpoint))
-            .map(|id| FindOrder(id)),
-    ];
+impl Handler<Request> for Petstore {
+    type Item = super::PetstoreResponse;
+    type Error = Error;
+    type Future = super::PetstoreHandlerFuture;
 
-    let users = endpoint![
-        post("user")
-            .with(body().map_err(Error::endpoint))
-            .map(|Json(u)| AddUser(u)),
-        post("user/createWithList")
-            .with(body().map_err(Error::endpoint))
-            .map(|Json(body)| AddUsersViaList(body)),
-        post("user/createWithArray")
-            .with(body().map_err(Error::endpoint))
-            .map(|Json(body)| AddUsersViaList(body)),
-        delete("user")
-            .with(path().map_err(Error::endpoint))
-            .map(|n| DeleteUser(n)),
-        get("user")
-            .with(path().map_err(Error::endpoint))
-            .map(|n| GetUser(n)),
-        put("user")
-            .with(body().map_err(Error::endpoint))
-            .map(|Json(u)| UpdateUser(u)),
-    ];
-
-    endpoint![pets, store, users,]
+    fn call(&self, request: Request) -> Self::Future {
+        use self::Request::*;
+        use super::PetstoreResponse::*;
+        match request {
+            GetPet(id) => self.db.get_pet(id).map(ThePet).into(),
+            AddPet(pet) => self.db.add_pet(pet).map(PetCreated).into(),
+            UpdatePet(pet) => self.db.update_pet(pet).map(|pet| ThePet(Some(pet))).into(),
+            DeletePet(id) => self.db.delete_pet(id).map(|_| PetDeleted).into(),
+            FindPetsByStatuses(param) => self.db.get_pets_by_status(param.status).map(Pets).into(),
+            FindPetsByTags(param) => self.db.find_pets_by_tag(param.tags).map(Pets).into(),
+            UpdatePetViaForm(id, param) => self.db
+                .update_pet_name_status(id, param.name, param.status)
+                .map(|pet| ThePet(Some(pet)))
+                .into(),
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::Request::*;
+
     use finchers::http::HttpRequest;
     use finchers::test::EndpointTestExt;
+    use model::Status::*;
 
     #[test]
     fn test_add_pet() {
         let request = HttpRequest::get("/pet/42")
             .body(Default::default())
             .unwrap();
-        match petstore_endpoint().run(request) {
+        match endpoint().run(request) {
             Some(Ok(req)) => assert_eq!(req, GetPet(42)),
             _ => panic!(),
         }
@@ -222,7 +198,7 @@ mod tests {
             .body(Default::default())
             .unwrap();
         assert_eq!(
-            petstore_endpoint().run(request).map(|r| r.unwrap()),
+            endpoint().run(request).map(|r| r.unwrap()),
             Some(FindPetsByStatuses(FindPetsByStatusesParam {
                 status: vec![Available, Adopted],
             }))
@@ -235,7 +211,7 @@ mod tests {
             .body(Default::default())
             .unwrap();
         assert_eq!(
-            petstore_endpoint().run(request).map(|r| r.unwrap()),
+            endpoint().run(request).map(|r| r.unwrap()),
             Some(FindPetsByTags(FindPetsByTagsParam {
                 tags: vec!["cat".into(), "cute".into()],
             }))
@@ -248,7 +224,7 @@ mod tests {
             .body("name=Alice&status=available".into())
             .unwrap();
         assert_eq!(
-            petstore_endpoint().run(request).map(|r| r.unwrap()),
+            endpoint().run(request).map(|r| r.unwrap()),
             Some(UpdatePetViaForm(
                 42,
                 UpdatePetParam {

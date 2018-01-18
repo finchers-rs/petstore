@@ -10,32 +10,35 @@ extern crate serde_derive;
 extern crate serde_json;
 extern crate tokio_core;
 
-mod model;
+mod api;
 mod db;
-mod endpoint;
-mod error;
-mod handler;
+mod model;
 
 use finchers::service::FinchersService;
 use finchers::responder::DefaultResponder;
 use std::rc::Rc;
 use futures::{Future, Stream};
-use hyper::server::Http;
+use hyper::server::{Http, NewService};
 use tokio_core::reactor::Core;
 
 use db::PetstoreDb;
-use endpoint::petstore_endpoint;
-use handler::PetstoreHandler;
 
 fn main() {
     let db = PetstoreDb::new();
+
     let service = FinchersService::new(
-        Rc::new(petstore_endpoint()),
-        PetstoreHandler::new(db),
+        Rc::new(api::endpoint()),
+        api::Petstore::new(db),
         DefaultResponder::default(),
     );
-    let new_service = move || Ok(service.clone());
 
+    run_service(move || Ok(service.clone()));
+}
+
+fn run_service<S>(new_service: S)
+where
+    S: NewService<Request = hyper::Request, Response = hyper::Response, Error = hyper::Error> + 'static,
+{
     let mut core = Core::new().unwrap();
     let mut http = Http::new();
     http.pipeline(true);
