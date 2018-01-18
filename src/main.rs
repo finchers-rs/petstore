@@ -13,33 +13,27 @@ extern crate tokio_core;
 mod model;
 mod db;
 mod endpoint;
+mod error;
 mod handler;
-mod responder;
 
 use finchers::service::FinchersService;
+use finchers::responder::DefaultResponder;
 use std::rc::Rc;
 use futures::{Future, Stream};
-use hyper::server::{Http, Service};
+use hyper::server::Http;
 use tokio_core::reactor::Core;
 
 use db::PetstoreDb;
 use endpoint::petstore_endpoint;
 use handler::PetstoreHandler;
-use responder::PetstoreResponder;
-
-fn build_service(
-    db: PetstoreDb,
-) -> impl Service<Request = hyper::Request, Response = hyper::Response, Error = hyper::Error> + Clone + 'static {
-    FinchersService::new(
-        Rc::new(petstore_endpoint()),
-        PetstoreHandler::new(db),
-        PetstoreResponder::new(),
-    )
-}
 
 fn main() {
     let db = PetstoreDb::new();
-    let service = build_service(db);
+    let service = FinchersService::new(
+        Rc::new(petstore_endpoint()),
+        PetstoreHandler::new(db),
+        DefaultResponder::default(),
+    );
     let new_service = move || Ok(service.clone());
 
     let mut core = Core::new().unwrap();

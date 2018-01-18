@@ -9,6 +9,30 @@ use finchers::contrib::json::Json;
 use finchers::contrib::urlencoded::{self, queries_opt, Form, FromUrlEncoded};
 
 use model::*;
+use error::Error;
+
+#[derive(Debug)]
+pub struct MissingQuery {
+    _priv: (),
+}
+
+impl MissingQuery {
+    pub fn new() -> Self {
+        MissingQuery { _priv: () }
+    }
+}
+
+impl fmt::Display for MissingQuery {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(self.description())
+    }
+}
+
+impl StdError for MissingQuery {
+    fn description(&self) -> &str {
+        "missing query string"
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Request {
@@ -101,74 +125,39 @@ impl FromUrlEncoded for UpdatePetParam {
     }
 }
 
-#[derive(Debug)]
-pub enum EndpointError {
-    FromFramework(Box<StdError + 'static>),
-    MissingQuery,
-}
-
-impl EndpointError {
-    pub fn from<E: StdError + 'static>(err: E) -> Self {
-        EndpointError::FromFramework(Box::new(err))
-    }
-}
-
-impl fmt::Display for EndpointError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            EndpointError::FromFramework(ref e) => e.fmt(f),
-            EndpointError::MissingQuery => f.write_str("missing query string"),
-        }
-    }
-}
-
-impl StdError for EndpointError {
-    fn description(&self) -> &str {
-        "during parsing incoming HTTP request"
-    }
-
-    fn cause(&self) -> Option<&StdError> {
-        match *self {
-            EndpointError::FromFramework(ref e) => Some(&**e),
-            _ => None,
-        }
-    }
-}
-
 pub use self::Request::*;
 
-
-pub fn petstore_endpoint() -> impl Endpoint<Item = Request, Error = EndpointError> + 'static {
+pub fn petstore_endpoint() -> impl Endpoint<Item = Request, Error = Error> + 'static {
     // TODO: upload image
     let pets = endpoint![
         get("pet")
-            .with(path().map_err(EndpointError::from))
+            .with(path().map_err(Error::endpoint))
             .map(|id| GetPet(id)),
         post("pet")
-            .with(body().map_err(EndpointError::from))
+            .with(body().map_err(Error::endpoint))
             .map(|Json(pet)| AddPet(pet)),
         put("pet")
-            .with(body().map_err(EndpointError::from))
+            .with(body().map_err(Error::endpoint))
             .map(|Json(pet)| UpdatePet(pet)),
         delete("pet")
-            .with(path().map_err(EndpointError::from))
+            .with(path().map_err(Error::endpoint))
             .map(|id| DeletePet(id)),
         get("pet/findByStatus")
-            .with(queries_opt().map_err(EndpointError::from))
+            .with(queries_opt().map_err(Error::endpoint))
             .and_then(|res| match res {
                 Some(q) => Ok(FindPetsByStatuses(q)),
-                None => Err(EndpointError::MissingQuery),
+                None => Err(Error::endpoint(MissingQuery::new())),
             }),
         get("pet/findByTags")
-            .with(queries_opt().map_err(EndpointError::from))
+            .with(queries_opt().map_err(Error::endpoint))
             .and_then(|res| match res {
                 Some(q) => Ok(FindPetsByTags(q)),
-                None => Err(EndpointError::MissingQuery),
+                None => Err(Error::endpoint(MissingQuery::new())),
             }),
         post("pet")
             .with((
-                path().map_err(EndpointError::from),
-                body().map_err(EndpointError::from),
+                path().map_err(Error::endpoint),
+                body().map_err(Error::endpoint),
             ))
             .map(|(id, Form(param))| UpdatePetViaForm(id, param))
     ];
@@ -176,34 +165,34 @@ pub fn petstore_endpoint() -> impl Endpoint<Item = Request, Error = EndpointErro
     let store = endpoint![
         get("store/inventory").with(ok(GetInventory)),
         post("store/order")
-            .with(body().map_err(EndpointError::from))
+            .with(body().map_err(Error::endpoint))
             .map(|Json(order)| AddOrder(order)),
         delete("store/order")
-            .with(path().map_err(EndpointError::from))
+            .with(path().map_err(Error::endpoint))
             .map(|id| DeleteOrder(id)),
         get("store/order")
-            .with(path().map_err(EndpointError::from))
+            .with(path().map_err(Error::endpoint))
             .map(|id| FindOrder(id)),
     ];
 
     let users = endpoint![
         post("user")
-            .with(body().map_err(EndpointError::from))
+            .with(body().map_err(Error::endpoint))
             .map(|Json(u)| AddUser(u)),
         post("user/createWithList")
-            .with(body().map_err(EndpointError::from))
+            .with(body().map_err(Error::endpoint))
             .map(|Json(body)| AddUsersViaList(body)),
         post("user/createWithArray")
-            .with(body().map_err(EndpointError::from))
+            .with(body().map_err(Error::endpoint))
             .map(|Json(body)| AddUsersViaList(body)),
         delete("user")
-            .with(path().map_err(EndpointError::from))
+            .with(path().map_err(Error::endpoint))
             .map(|n| DeleteUser(n)),
         get("user")
-            .with(path().map_err(EndpointError::from))
+            .with(path().map_err(Error::endpoint))
             .map(|n| GetUser(n)),
         put("user")
-            .with(body().map_err(EndpointError::from))
+            .with(body().map_err(Error::endpoint))
             .map(|Json(u)| UpdateUser(u)),
     ];
 
