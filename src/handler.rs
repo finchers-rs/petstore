@@ -11,84 +11,47 @@ use endpoint::Request::*;
 use error::Error;
 
 #[derive(Debug)]
-pub struct PetstoreResponse {
-    pub status: StatusCode,
-    pub content: Option<PetstoreResponseContent>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(untagged)]
-pub enum PetstoreResponseContent {
+pub enum PetstoreResponse {
     ThePet(Option<Pet>),
-    PetId(u64),
+    PetCreated(u64),
     Pets(Vec<Pet>),
+    PetDeleted,
 
     TheInventory(Inventory),
-    OrderId(u64),
     TheOrder(Option<Order>),
+    OrderCreated(u64),
     OrderDeleted(bool),
 
-    Username(String),
-    Usernames(Vec<String>),
+    UserCreated(String),
+    UsersCreated(Vec<String>),
     TheUser(Option<User>),
+    UserDeleted,
 }
 
-pub use self::PetstoreResponseContent::*;
-
-impl From<PetstoreResponseContent> for PetstoreResponse {
-    fn from(content: PetstoreResponseContent) -> Self {
-        PetstoreResponse {
-            status: StatusCode::Ok,
-            content: Some(content),
-        }
-    }
-}
-
-impl PetstoreResponse {
-    pub fn created(content: PetstoreResponseContent) -> Self {
-        PetstoreResponse {
-            status: StatusCode::Created,
-            content: Some(content),
-        }
-    }
-
-    pub fn no_content() -> Self {
-        PetstoreResponse {
-            status: StatusCode::NoContent,
-            content: None,
-        }
-    }
-}
+pub use self::PetstoreResponse::*;
 
 impl IntoResponse for PetstoreResponse {
     fn into_response(self) -> Response {
-        let PetstoreResponse { status, content } = self;
-        match content {
-            Some(content) => {
-                use handler::PetstoreResponseContent::*;
-                match content {
-                    ThePet(pet) => pet.map_or_else(no_route, |p| respond_json(&p).with_status(status)),
-                    PetId(id) => respond_json(&id).with_status(status),
-                    Pets(id) => respond_json(&id).with_status(status),
+        match self {
+            ThePet(pet) => pet.map_or_else(no_route, |p| json_response(&p)),
+            PetCreated(id) => json_response(&id).with_status(StatusCode::Created),
+            Pets(id) => json_response(&id),
+            PetDeleted => no_content(),
 
-                    TheInventory(inventory) => respond_json(&inventory).with_status(status),
-                    OrderId(id) => respond_json(&id).with_status(status),
-                    TheOrder(order) => order.map_or_else(no_route, |o| respond_json(&o).with_status(status)),
-                    OrderDeleted(deleted) => respond_json(&deleted).with_status(status),
+            TheInventory(inventory) => json_response(&inventory),
+            TheOrder(order) => order.map_or_else(no_route, |o| json_response(&o)),
+            OrderCreated(id) => json_response(&id).with_status(StatusCode::Created),
+            OrderDeleted(deleted) => json_response(&deleted),
 
-                    Username(username) => respond_json(&username).with_status(status),
-                    Usernames(usernames) => respond_json(&usernames).with_status(status),
-                    TheUser(user) => user.map_or_else(no_route, |u| respond_json(&u).with_status(status)),
-                }
-            }
-            None => Response::new()
-                .with_status(StatusCode::NoContent)
-                .with_header(header::ContentLength(0)),
+            UserCreated(username) => json_response(&username).with_status(StatusCode::Created),
+            UsersCreated(usernames) => json_response(&usernames).with_status(StatusCode::Created),
+            TheUser(user) => user.map_or_else(no_route, |u| json_response(&u)),
+            UserDeleted => no_content(),
         }
     }
 }
 
-fn respond_json<T: Serialize>(content: &T) -> Response {
+fn json_response<T: Serialize>(content: &T) -> Response {
     let body = serde_json::to_vec(&content).unwrap();
     Response::new()
         .with_header(header::ContentType::json())
@@ -96,8 +59,16 @@ fn respond_json<T: Serialize>(content: &T) -> Response {
         .with_body(body)
 }
 
+fn no_content() -> Response {
+    Response::new()
+        .with_status(StatusCode::NoContent)
+        .with_header(header::ContentLength(0))
+}
+
 fn no_route() -> Response {
-    Response::new().with_status(StatusCode::NotFound)
+    Response::new()
+        .with_status(StatusCode::NotFound)
+        .with_header(header::ContentLength(0))
 }
 
 #[derive(Debug, Clone)]
@@ -111,6 +82,14 @@ impl PetstoreHandler {
     }
 }
 
+impl PetstoreHandler {
+    fn add_users(&self, users: Vec<User>) -> impl Future<Item = Vec<String>, Error = DbError> {
+        use futures::future::join_all;
+        let db = self.db.clone();
+        join_all(users.into_iter().map(move |new_user| db.add_user(new_user)))
+    }
+}
+
 impl Handler<Request> for PetstoreHandler {
     type Item = PetstoreResponse;
     type Error = Error;
@@ -118,66 +97,29 @@ impl Handler<Request> for PetstoreHandler {
 
     fn call(&self, request: Request) -> Self::Future {
         match request {
-            GetPet(id) => self.db.get_pet(id).map(|pet| ThePet(pet).into()).into(),
-            AddPet(pet) => self.db
-                .add_pet(pet)
-                .map(|id| PetstoreResponse::created(PetId(id)))
-                .into(),
-            UpdatePet(pet) => self.db
-                .update_pet(pet)
-                .map(|pet| ThePet(Some(pet)).into())
-                .into(),
-            DeletePet(id) => self.db
-                .delete_pet(id)
-                .map(|_| PetstoreResponse::no_content())
-                .into(),
-            FindPetsByStatuses(param) => self.db
-                .get_pets_by_status(param.status)
-                .map(|pets| Pets(pets).into())
-                .into(),
-            FindPetsByTags(param) => self.db
-                .find_pets_by_tag(param.tags)
-                .map(|pets| Pets(pets).into())
-                .into(),
+            GetPet(id) => self.db.get_pet(id).map(ThePet).into(),
+            AddPet(pet) => self.db.add_pet(pet).map(PetCreated).into(),
+            UpdatePet(pet) => self.db.update_pet(pet).map(|pet| ThePet(Some(pet))).into(),
+            DeletePet(id) => self.db.delete_pet(id).map(|_| PetDeleted).into(),
+            FindPetsByStatuses(param) => self.db.get_pets_by_status(param.status).map(Pets).into(),
+            FindPetsByTags(param) => self.db.find_pets_by_tag(param.tags).map(Pets).into(),
             UpdatePetViaForm(id, param) => self.db
                 .update_pet_name_status(id, param.name, param.status)
-                .map(|pet| ThePet(Some(pet)).into())
+                .map(|pet| ThePet(Some(pet)))
                 .into(),
 
-            GetInventory => self.db
-                .get_inventory()
-                .map(|inventory| TheInventory(inventory).into())
-                .into(),
-            AddOrder(order) => self.db.add_order(order).map(|id| OrderId(id).into()).into(),
-            DeleteOrder(id) => self.db
-                .delete_order(id)
-                .map(|deleted| OrderDeleted(deleted).into())
-                .into(),
-            FindOrder(id) => self.db
-                .find_order(id)
-                .map(|order| TheOrder(order).into())
-                .into(),
+            GetInventory => self.db.get_inventory().map(TheInventory).into(),
+            AddOrder(order) => self.db.add_order(order).map(OrderCreated).into(),
+            DeleteOrder(id) => self.db.delete_order(id).map(OrderDeleted).into(),
+            FindOrder(id) => self.db.find_order(id).map(TheOrder).into(),
 
-            AddUser(new_user) => self.db
-                .add_user(new_user)
-                .map(|username| Username(username).into())
-                .into(),
-            AddUsersViaList(users) => ::futures::future::join_all(users.into_iter().map({
-                let db = self.db.clone();
-                move |new_user| db.add_user(new_user)
-            })).map(|usernames| PetstoreResponse::created(Usernames(usernames)))
-                .into(),
-            DeleteUser(name) => self.db
-                .delete_user(name)
-                .map(|_| PetstoreResponse::no_content())
-                .into(),
-            GetUser(name) => self.db
-                .get_user(name)
-                .map(|user| TheUser(user).into())
-                .into(),
+            AddUser(new_user) => self.db.add_user(new_user).map(UserCreated).into(),
+            AddUsersViaList(users) => self.add_users(users).map(UsersCreated).into(),
+            DeleteUser(name) => self.db.delete_user(name).map(|_| UserDeleted).into(),
+            GetUser(name) => self.db.get_user(name).map(TheUser).into(),
             UpdateUser(user) => self.db
                 .update_user(user)
-                .map(|user| TheUser(Some(user)).into())
+                .map(|user| TheUser(Some(user)))
                 .into(),
         }
     }
