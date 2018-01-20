@@ -1,8 +1,5 @@
-use finchers::contrib::json::Json;
-use finchers::contrib::urlencoded::{self, queries_req, Form, FromUrlEncoded};
-use finchers::endpoint::{body, path, Endpoint};
-use finchers::endpoint::method::{delete, get, post, put};
-use finchers::handler::Handler;
+use finchers::{Endpoint, Handler};
+use finchers::contrib::urlencoded::{self, FromUrlEncoded};
 use futures::Future;
 
 use model::{Pet, Status};
@@ -88,34 +85,22 @@ impl FromUrlEncoded for UpdatePetParam {
 
 // TODO: upload image
 pub fn endpoint() -> impl Endpoint<Item = Request, Error = Error> + Clone + 'static {
+    use finchers::endpoint::prelude::*;
+    use finchers::contrib::json::json_body;
+    use finchers::contrib::urlencoded::{queries_req, Form};
     use self::Request::*;
 
-    endpoint![
-        get("pet")
-            .with(path().map_err(Error::endpoint))
-            .map(|id| GetPet(id)),
-        post("pet")
-            .with(body().map_err(Error::endpoint))
-            .map(|Json(pet)| AddPet(pet)),
-        put("pet")
-            .with(body().map_err(Error::endpoint))
-            .map(|Json(pet)| UpdatePet(pet)),
-        delete("pet")
-            .with(path().map_err(Error::endpoint))
-            .map(|id| DeletePet(id)),
-        get("pet/findByStatus")
-            .with(queries_req().map_err(Error::endpoint))
+    endpoint("pet").with(choice![
+        get(path()).map(GetPet),
+        post(json_body()).map(AddPet),
+        put(json_body()).map(UpdatePet),
+        delete(path()).map(DeletePet),
+        get("findByStatus")
+            .with(queries_req())
             .map(FindPetsByStatuses),
-        get("pet/findByTags")
-            .with(queries_req().map_err(Error::endpoint))
-            .map(FindPetsByTags),
-        post("pet")
-            .with((
-                path().map_err(Error::endpoint),
-                body().map_err(Error::endpoint),
-            ))
-            .map(|(id, Form(param))| UpdatePetViaForm(id, param))
-    ]
+        get("findByTags").with(queries_req()).map(FindPetsByTags),
+        post((path().from_err::<Error>(), body().from_err())).map(|(id, Form(param))| UpdatePetViaForm(id, param))
+    ])
 }
 
 impl Handler<Request> for Petstore {

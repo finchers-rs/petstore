@@ -1,7 +1,4 @@
-use finchers::contrib::json::Json;
-use finchers::endpoint::{body, ok, path, Endpoint};
-use finchers::endpoint::method::{delete, get, post};
-use finchers::handler::Handler;
+use finchers::{Endpoint, Handler};
 use futures::Future;
 
 use model::Order;
@@ -16,20 +13,20 @@ pub enum Request {
 }
 
 pub fn endpoint() -> impl Endpoint<Item = Request, Error = Error> + Clone + 'static {
+    use finchers::endpoint::prelude::*;
+    use finchers::endpoint::ok;
+    use finchers::contrib::json::json_body;
     use self::Request::*;
 
-    endpoint![
-        get("store/inventory").with(ok(GetInventory)),
-        post("store/order")
-            .with(body().map_err(Error::endpoint))
-            .map(|Json(order)| AddOrder(order)),
-        delete("store/order")
-            .with(path().map_err(Error::endpoint))
-            .map(|id| DeleteOrder(id)),
-        get("store/order")
-            .with(path().map_err(Error::endpoint))
-            .map(|id| FindOrder(id)),
-    ]
+    endpoint("store").with(choice![
+        get("inventory").with(ok::<_, Error>(GetInventory)),
+        endpoint::<_, _, Error>("order")
+            .with(choice![
+                post(json_body()).map(AddOrder),
+                delete(path()).map(DeleteOrder),
+                get(path()).map(FindOrder),
+            ]),
+    ])
 }
 
 impl Handler<Request> for Petstore {
