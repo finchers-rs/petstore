@@ -83,6 +83,33 @@ impl FromUrlEncoded for UpdatePetParam {
     }
 }
 
+#[derive(Debug)]
+pub enum Response {
+    ThePet(Option<Pet>),
+    PetCreated(u64),
+    Pets(Vec<Pet>),
+    PetDeleted,
+}
+
+use self::Request::*;
+use self::Response::*;
+
+mod imp {
+    use super::*;
+    use common::*;
+
+    impl IntoResponse for super::Response {
+        fn into_response(self) -> HyperResponse {
+            match self {
+                ThePet(pet) => pet.map_or_else(no_route, |p| json_response(&p)),
+                PetCreated(id) => json_response(&id).with_status(StatusCode::Created),
+                Pets(id) => json_response(&id),
+                PetDeleted => no_content(),
+            }
+        }
+    }
+}
+
 // TODO: upload image
 pub fn endpoint() -> impl Endpoint<Item = Request, Error = Error> + Clone + 'static {
     use finchers::endpoint::prelude::*;
@@ -104,13 +131,11 @@ pub fn endpoint() -> impl Endpoint<Item = Request, Error = Error> + Clone + 'sta
 }
 
 impl Handler<Request> for Petstore {
-    type Item = super::PetstoreResponse;
+    type Item = Response;
     type Error = Error;
-    type Future = super::PetstoreHandlerFuture;
+    type Future = Box<Future<Item = Self::Item, Error = Self::Error>>;
 
     fn call(&self, request: Request) -> Self::Future {
-        use self::Request::*;
-        use super::PetstoreResponse::*;
         match request {
             GetPet(id) => self.db.get_pet(id).map(ThePet).into(),
             AddPet(pet) => self.db.add_pet(pet).map(PetCreated).into(),

@@ -6,12 +6,38 @@ use super::{Error, Petstore};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Request {
-    // users APIs
     AddUser(User),
     AddUsersViaList(Vec<User>),
     DeleteUser(String),
     GetUser(String),
     UpdateUser(User),
+}
+
+#[derive(Debug)]
+pub enum Response {
+    UserCreated(String),
+    UsersCreated(Vec<String>),
+    TheUser(Option<User>),
+    UserDeleted,
+}
+
+use self::Request::*;
+use self::Response::*;
+
+mod imp {
+    use common::*;
+    use super::Response::*;
+
+    impl IntoResponse for super::Response {
+        fn into_response(self) -> HyperResponse {
+            match self {
+                UserCreated(username) => json_response(&username).with_status(StatusCode::Created),
+                UsersCreated(usernames) => json_response(&usernames).with_status(StatusCode::Created),
+                TheUser(user) => user.map_or_else(no_route, |u| json_response(&u)),
+                UserDeleted => no_content(),
+            }
+        }
+    }
 }
 
 pub fn endpoint() -> impl Endpoint<Item = Request, Error = Error> + Clone + 'static {
@@ -34,13 +60,11 @@ pub fn endpoint() -> impl Endpoint<Item = Request, Error = Error> + Clone + 'sta
 }
 
 impl Handler<Request> for Petstore {
-    type Item = super::PetstoreResponse;
-    type Error = super::Error;
-    type Future = super::PetstoreHandlerFuture;
+    type Item = Response;
+    type Error = Error;
+    type Future = Box<Future<Item = Self::Item, Error = Self::Error>>;
 
     fn call(&self, request: Request) -> Self::Future {
-        use self::Request::*;
-        use super::PetstoreResponse::*;
         match request {
             AddUser(new_user) => self.db.add_user(new_user).map(UserCreated).into(),
             AddUsersViaList(users) => self.add_users(users).map(UsersCreated).into(),

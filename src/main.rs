@@ -11,6 +11,7 @@ extern crate serde_json;
 extern crate tokio_core;
 
 mod api;
+mod common;
 mod db;
 mod model;
 
