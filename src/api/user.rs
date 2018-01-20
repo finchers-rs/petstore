@@ -1,7 +1,4 @@
-use finchers::contrib::json::Json;
-use finchers::endpoint::{body, path, Endpoint};
-use finchers::endpoint::method::{delete, get, post, put};
-use finchers::handler::Handler;
+use finchers::{Endpoint, Handler};
 use futures::Future;
 
 use model::User;
@@ -18,36 +15,30 @@ pub enum Request {
 }
 
 pub fn endpoint() -> impl Endpoint<Item = Request, Error = Error> + Clone + 'static {
+    use finchers::endpoint::prelude::*;
+    use finchers::contrib::json::json_body;
     use self::Request::*;
 
-    endpoint![
-        post("user")
-            .with(body().map_err(Error::endpoint))
-            .map(|Json(u)| AddUser(u)),
-        post("user/createWithList")
-            .with(body().map_err(Error::endpoint))
-            .map(|Json(body)| AddUsersViaList(body)),
-        post("user/createWithArray")
-            .with(body().map_err(Error::endpoint))
-            .map(|Json(body)| AddUsersViaList(body)),
-        delete("user")
-            .with(path().map_err(Error::endpoint))
-            .map(|n| DeleteUser(n)),
-        get("user")
-            .with(path().map_err(Error::endpoint))
-            .map(|n| GetUser(n)),
-        put("user")
-            .with(body().map_err(Error::endpoint))
-            .map(|Json(u)| UpdateUser(u)),
-    ]
+    endpoint("user").with(choice![
+        get(path()).map(GetUser),
+        delete(path()).map(DeleteUser),
+        post(json_body()).map(AddUser),
+        put(json_body()).map(UpdateUser),
+        post("createWithList")
+            .with(json_body())
+            .map(AddUsersViaList),
+        post("createWithArray")
+            .with(json_body())
+            .map(AddUsersViaList),
+    ])
 }
 
 impl Handler<Request> for Petstore {
     type Item = super::PetstoreResponse;
     type Error = super::Error;
-    type Future = super::PetstoreHandlerFuture;
+    type Result = super::PetstoreHandlerFuture;
 
-    fn call(&self, request: Request) -> Self::Future {
+    fn call(&self, request: Request) -> Self::Result {
         use self::Request::*;
         use super::PetstoreResponse::*;
         match request {

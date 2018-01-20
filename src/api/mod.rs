@@ -19,7 +19,7 @@ pub enum Request {
 }
 
 pub fn endpoint() -> impl Endpoint<Item = Request, Error = Error> + Clone + 'static {
-    endpoint![
+    choice![
         pet::endpoint().map(Request::Pet),
         store::endpoint().map(Request::Store),
         user::endpoint().map(Request::User),
@@ -114,9 +114,9 @@ impl Petstore {
 impl Handler<Request> for Petstore {
     type Item = PetstoreResponse;
     type Error = Error;
-    type Future = PetstoreHandlerFuture;
+    type Result = PetstoreHandlerFuture;
 
-    fn call(&self, request: Request) -> Self::Future {
+    fn call(&self, request: Request) -> Self::Result {
         use self::Request::*;
         match request {
             Pet(pet) => self.call(pet),
@@ -138,10 +138,10 @@ where
 }
 
 impl Future for PetstoreHandlerFuture {
-    type Item = PetstoreResponse;
+    type Item = Option<PetstoreResponse>;
     type Error = Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        self.0.poll().map_err(Error::database)
+        self.0.poll().map(|e| e.map(Some)).map_err(Error::database)
     }
 }

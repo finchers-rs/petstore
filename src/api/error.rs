@@ -8,11 +8,13 @@ pub enum Error {
     Database(DbError),
 }
 
-impl Error {
-    pub fn endpoint<E: StdError + 'static>(err: E) -> Self {
+impl<E: StdError + 'static> From<E> for Error {
+    fn from(err: E) -> Self {
         Error::Endpoint(Box::new(err))
     }
+}
 
+impl Error {
     pub fn database(err: DbError) -> Self {
         Error::Database(err)
     }
