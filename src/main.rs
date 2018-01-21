@@ -1,18 +1,8 @@
-#![feature(conservative_impl_trait)]
-
-#[macro_use]
 extern crate finchers;
 extern crate futures;
 extern crate hyper;
-extern crate serde;
-#[macro_use]
-extern crate serde_derive;
-extern crate serde_json;
+extern crate petstore;
 extern crate tokio_core;
-
-mod api;
-mod db;
-mod model;
 
 use finchers::service::FinchersService;
 use finchers::responder::DefaultResponder;
@@ -20,14 +10,12 @@ use futures::{Future, Stream};
 use hyper::server::{Http, NewService};
 use tokio_core::reactor::Core;
 
-use db::PetstoreDb;
-
 fn main() {
-    let db = PetstoreDb::new();
+    let db = petstore::PetstoreDb::new();
 
     let service = FinchersService::new(
-        api::endpoint(),
-        api::Petstore::new(db),
+        petstore::api::endpoint(),
+        petstore::Petstore::new(db),
         DefaultResponder::default(),
     );
 

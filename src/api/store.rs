@@ -1,7 +1,8 @@
 use finchers::{Endpoint, Handler};
 
+use error::Error;
 use model::{Inventory, Order};
-use super::{Error, Petstore};
+use petstore::Petstore;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Request {
@@ -19,12 +20,15 @@ pub enum Response {
     OrderDeleted(bool),
 }
 
+use self::Request::*;
+use self::Response::*;
+
 mod imp {
+    use super::*;
     use api::common::*;
 
-    impl IntoResponse for super::Response {
+    impl IntoResponse for Response {
         fn into_response(self) -> HyperResponse {
-            use super::Response::*;
             match self {
                 TheInventory(inventory) => json_response(&inventory),
                 TheOrder(order) => json_response(&order),
@@ -39,7 +43,6 @@ pub fn endpoint() -> impl Endpoint<Item = Request, Error = Error> + Clone + 'sta
     use finchers::endpoint::prelude::*;
     use finchers::endpoint::ok;
     use finchers::contrib::json::json_body;
-    use self::Request::*;
 
     endpoint("store").with(choice![
         get("inventory").with(ok::<_, Error>(GetInventory)),
@@ -57,22 +60,20 @@ impl Handler<Request> for Petstore {
     type Result = Result<Option<Self::Item>, Self::Error>;
 
     fn call(&self, request: Request) -> Self::Result {
-        use self::Request::*;
-        use self::Response::*;
         match request {
-            GetInventory => self.db
+            GetInventory => self.database()
                 .get_inventory()
                 .map_err(Error::database)
                 .map(|i| Some(TheInventory(i))),
-            AddOrder(order) => self.db
+            AddOrder(order) => self.database()
                 .add_order(order)
                 .map_err(Error::database)
                 .map(|id| Some(OrderCreated(id))),
-            DeleteOrder(id) => self.db
+            DeleteOrder(id) => self.database()
                 .delete_order(id)
                 .map_err(Error::database)
                 .map(|deleted| Some(OrderDeleted(deleted))),
-            FindOrder(id) => self.db
+            FindOrder(id) => self.database()
                 .find_order(id)
                 .map_err(Error::database)
                 .map(|o| o.map(TheOrder)),

@@ -2,7 +2,8 @@ use finchers::{Endpoint, Handler};
 use finchers::contrib::urlencoded::{self, FromUrlEncoded};
 
 use model::{Pet, Status};
-use super::{Error, Petstore};
+use error::Error;
+use petstore::Petstore;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Request {
@@ -90,12 +91,15 @@ pub enum Response {
     PetDeleted,
 }
 
+use self::Request::*;
+use self::Response::*;
+
 mod imp {
+    use super::*;
     use api::common::*;
 
-    impl IntoResponse for super::Response {
+    impl IntoResponse for Response {
         fn into_response(self) -> HyperResponse {
-            use super::Response::*;
             match self {
                 ThePet(pet) => json_response(&pet),
                 PetCreated(id) => json_response(&id).with_status(StatusCode::Created),
@@ -111,7 +115,6 @@ pub fn endpoint() -> impl Endpoint<Item = Request, Error = Error> + Clone + 'sta
     use finchers::endpoint::prelude::*;
     use finchers::contrib::json::json_body;
     use finchers::contrib::urlencoded::{queries_req, Form};
-    use self::Request::*;
 
     endpoint("pet").with(choice![
         get(path()).map(GetPet),
@@ -132,34 +135,32 @@ impl Handler<Request> for Petstore {
     type Result = Result<Option<Self::Item>, Self::Error>;
 
     fn call(&self, request: Request) -> Self::Result {
-        use self::Request::*;
-        use self::Response::*;
         match request {
-            GetPet(id) => self.db
+            GetPet(id) => self.database()
                 .get_pet(id)
                 .map_err(Error::database)
                 .map(|p| p.map(ThePet)),
-            AddPet(pet) => self.db
+            AddPet(pet) => self.database()
                 .add_pet(pet)
                 .map_err(Error::database)
                 .map(|id| Some(PetCreated(id))),
-            UpdatePet(pet) => self.db
+            UpdatePet(pet) => self.database()
                 .update_pet(pet)
                 .map_err(Error::database)
                 .map(|pet| Some(ThePet(pet))),
-            DeletePet(id) => self.db
+            DeletePet(id) => self.database()
                 .delete_pet(id)
                 .map_err(Error::database)
                 .map(|_| Some(PetDeleted)),
-            FindPetsByStatuses(param) => self.db
+            FindPetsByStatuses(param) => self.database()
                 .get_pets_by_status(param.status)
                 .map_err(Error::database)
                 .map(|pets| Some(Pets(pets))),
-            FindPetsByTags(param) => self.db
+            FindPetsByTags(param) => self.database()
                 .find_pets_by_tag(param.tags)
                 .map_err(Error::database)
                 .map(|pets| Some(Pets(pets))),
-            UpdatePetViaForm(id, param) => self.db
+            UpdatePetViaForm(id, param) => self.database()
                 .update_pet_name_status(id, param.name, param.status)
                 .map_err(Error::database)
                 .map(|pet| Some(ThePet(pet))),
@@ -170,8 +171,6 @@ impl Handler<Request> for Petstore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::Request::*;
-
     use finchers::http::HttpRequest;
     use finchers::test::EndpointTestExt;
     use model::Status::*;

@@ -1,28 +1,18 @@
-pub mod common;
-pub mod error;
-
-pub mod pet;
-pub mod store;
-pub mod user;
+mod common;
+mod pet;
+mod store;
+mod user;
 
 use finchers::{Endpoint, Handler};
 
-use db::PetstoreDb;
-use self::error::Error;
+use error::Error;
+use petstore::Petstore;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Request {
     Pet(pet::Request),
     Store(store::Request),
     User(user::Request),
-}
-
-pub fn endpoint() -> impl Endpoint<Item = Request, Error = Error> + Clone + 'static {
-    choice![
-        pet::endpoint().map(Request::Pet),
-        store::endpoint().map(Request::Store),
-        user::endpoint().map(Request::User),
-    ]
 }
 
 #[derive(Debug)]
@@ -47,15 +37,12 @@ mod imp {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Petstore {
-    db: PetstoreDb,
-}
-
-impl Petstore {
-    pub fn new(db: PetstoreDb) -> Self {
-        Petstore { db }
-    }
+pub fn endpoint() -> impl Endpoint<Item = Request, Error = Error> + Clone + 'static {
+    choice![
+        pet::endpoint().map(Request::Pet),
+        store::endpoint().map(Request::Store),
+        user::endpoint().map(Request::User),
+    ]
 }
 
 impl Handler<Request> for Petstore {
