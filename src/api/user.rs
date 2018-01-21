@@ -1,5 +1,4 @@
 use finchers::{Endpoint, Handler};
-use futures::Future;
 
 use model::User;
 use super::{Error, Petstore};
@@ -12,6 +11,29 @@ pub enum Request {
     DeleteUser(String),
     GetUser(String),
     UpdateUser(User),
+}
+
+#[derive(Debug)]
+pub enum Response {
+    UserCreated(String),
+    UsersCreated(Vec<String>),
+    TheUser(User),
+    UserDeleted,
+}
+
+mod imp {
+    use api::common::*;
+    impl IntoResponse for super::Response {
+        fn into_response(self) -> HyperResponse {
+            use super::Response::*;
+            match self {
+                UserCreated(username) => json_response(&username).with_status(StatusCode::Created),
+                UsersCreated(usernames) => json_response(&usernames).with_status(StatusCode::Created),
+                TheUser(user) => json_response(&user),
+                UserDeleted => no_content(),
+            }
+        }
+    }
 }
 
 pub fn endpoint() -> impl Endpoint<Item = Request, Error = Error> + Clone + 'static {
@@ -34,22 +56,34 @@ pub fn endpoint() -> impl Endpoint<Item = Request, Error = Error> + Clone + 'sta
 }
 
 impl Handler<Request> for Petstore {
-    type Item = super::PetstoreResponse;
+    type Item = Response;
     type Error = super::Error;
-    type Result = super::PetstoreHandlerFuture;
+    type Result = Result<Option<Self::Item>, Self::Error>;
 
     fn call(&self, request: Request) -> Self::Result {
         use self::Request::*;
-        use super::PetstoreResponse::*;
+        use self::Response::*;
         match request {
-            AddUser(new_user) => self.db.add_user(new_user).map(UserCreated).into(),
-            AddUsersViaList(users) => self.add_users(users).map(UsersCreated).into(),
-            DeleteUser(name) => self.db.delete_user(name).map(|_| UserDeleted).into(),
-            GetUser(name) => self.db.get_user(name).map(TheUser).into(),
+            AddUser(new_user) => self.db
+                .add_user(new_user)
+                .map_err(Error::database)
+                .map(|u| Some(UserCreated(u))),
+            AddUsersViaList(users) => self.db
+                .add_users(users)
+                .map_err(Error::database)
+                .map(|u| Some(UsersCreated(u))),
+            DeleteUser(name) => self.db
+                .delete_user(name)
+                .map_err(Error::database)
+                .map(|_| Some(UserDeleted)),
+            GetUser(name) => self.db
+                .get_user(name)
+                .map_err(Error::database)
+                .map(|u| u.map(TheUser)),
             UpdateUser(user) => self.db
                 .update_user(user)
-                .map(|user| TheUser(Some(user)))
-                .into(),
+                .map_err(Error::database)
+                .map(|user| Some(TheUser(user))),
         }
     }
 }

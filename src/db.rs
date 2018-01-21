@@ -7,7 +7,6 @@ use std::collections::HashMap;
 use std::error;
 use std::fmt;
 use std::rc::Rc;
-use futures::{future, Future, IntoFuture};
 
 #[derive(Debug)]
 pub enum DbError {
@@ -51,12 +50,6 @@ impl error::Error for DbError {
 pub use self::DbError::*;
 
 pub type DbResult<T> = Result<T, DbError>;
-
-pub type DbFuture<T> = Box<Future<Item = T, Error = DbError>>;
-
-pub fn err_future<T: 'static>(err: DbError) -> DbFuture<T> {
-    Box::new(future::err(err))
-}
 
 #[derive(Debug, Default)]
 pub struct PetstoreDbContext {
@@ -110,6 +103,31 @@ impl PetstoreDbContext {
         });
         pets
     }
+
+    fn add_user(&mut self, mut new_user: User) -> DbResult<String> {
+        if new_user.id.is_some() {
+            return Err(InvalidInput("New user should not contain an ID".into()));
+        }
+        let new_username = new_user.username.clone();
+        if self.users
+            .values()
+            .any(|user| user.username == new_username)
+        {
+            return Err(RedundantUserName(format!(
+                "Username {} is already taken",
+                new_user.username
+            )));
+        }
+        let new_id = if self.users.is_empty() {
+            0
+        } else {
+            self.users.keys().map(|id| *id).max().unwrap_or(0) + 1
+        };
+        new_user.id = Some(new_id);
+        self.users.insert(new_id, new_user);
+
+        Ok(new_username)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -124,39 +142,33 @@ impl PetstoreDb {
         }
     }
 
-    fn read_async<F, T: 'static>(&self, f: F) -> DbFuture<T>
+    fn read_async<F, T: 'static>(&self, f: F) -> DbResult<T>
     where
         F: FnOnce(&PetstoreDbContext) -> Result<T, DbError>,
     {
-        Box::new(
-            self.context
-                .try_borrow()
-                .map_err(BorrowError)
-                .and_then(|context| f(&*context))
-                .into_future(),
-        )
+        self.context
+            .try_borrow()
+            .map_err(BorrowError)
+            .and_then(|context| f(&*context))
     }
 
-    fn write_async<F, T: 'static>(&self, f: F) -> DbFuture<T>
+    fn write_async<F, T: 'static>(&self, f: F) -> DbResult<T>
     where
         F: FnOnce(&mut PetstoreDbContext) -> Result<T, DbError>,
     {
-        Box::new(
-            self.context
-                .try_borrow_mut()
-                .map_err(BorrowMutError)
-                .and_then(|mut context| f(&mut *context))
-                .into_future(),
-        )
+        self.context
+            .try_borrow_mut()
+            .map_err(BorrowMutError)
+            .and_then(|mut context| f(&mut *context))
     }
 
-    pub fn get_pet(&self, id: u64) -> DbFuture<Option<Pet>> {
+    pub fn get_pet(&self, id: u64) -> DbResult<Option<Pet>> {
         self.read_async(move |context| Ok(context.pets.get(&id).cloned()))
     }
 
-    pub fn add_pet(&self, mut pet: Pet) -> DbFuture<u64> {
+    pub fn add_pet(&self, mut pet: Pet) -> DbResult<u64> {
         if pet.id.is_some() {
-            return err_future(InvalidInput("New pet should not contain an ID".to_string()));
+            return Err(InvalidInput("New pet should not contain an ID".to_string()));
         }
         self.write_async(move |context| -> DbResult<_> {
             let new_id = if context.pets.is_empty() {
@@ -181,9 +193,9 @@ impl PetstoreDb {
         })
     }
 
-    pub fn update_pet(&self, pet: Pet) -> DbFuture<Pet> {
+    pub fn update_pet(&self, pet: Pet) -> DbResult<Pet> {
         if pet.id.is_none() {
-            return err_future(MissingIdentifier(format!("Missing id for pet: {:?}", pet)));
+            return Err(MissingIdentifier(format!("Missing id for pet: {:?}", pet)));
         }
         self.write_async(move |context| {
             let id = pet.id.unwrap();
@@ -196,11 +208,11 @@ impl PetstoreDb {
         })
     }
 
-    pub fn get_pets_by_status(&self, statuses: Vec<Status>) -> DbFuture<Vec<Pet>> {
+    pub fn get_pets_by_status(&self, statuses: Vec<Status>) -> DbResult<Vec<Pet>> {
         self.read_async(move |context| Ok(context.find_pets(|p| p.status.map_or(true, |s| statuses.contains(&s)))))
     }
 
-    pub fn find_pets_by_tag(&self, tags: Vec<String>) -> DbFuture<Vec<Pet>> {
+    pub fn find_pets_by_tag(&self, tags: Vec<String>) -> DbResult<Vec<Pet>> {
         self.read_async(move |context| {
             Ok(context.find_pets(|p| {
                 tags.iter().all(|ftag| {
@@ -212,7 +224,7 @@ impl PetstoreDb {
         })
     }
 
-    pub fn delete_pet(&self, id: u64) -> DbFuture<()> {
+    pub fn delete_pet(&self, id: u64) -> DbResult<()> {
         self.write_async(move |context| {
             if context.pets.contains_key(&id) {
                 context.pets.remove(&id);
@@ -226,7 +238,7 @@ impl PetstoreDb {
         })
     }
 
-    pub fn update_pet_name_status(&self, pet_id: u64, name: Option<String>, status: Option<Status>) -> DbFuture<Pet> {
+    pub fn update_pet_name_status(&self, pet_id: u64, name: Option<String>, status: Option<Status>) -> DbResult<Pet> {
         self.write_async(move |context| {
             if context.pets.contains_key(&pet_id) {
                 let pet = context.pets.get_mut(&pet_id).unwrap();
@@ -245,7 +257,7 @@ impl PetstoreDb {
 
     // TODO: add_image
 
-    pub fn get_inventory(&self) -> DbFuture<Inventory> {
+    pub fn get_inventory(&self) -> DbResult<Inventory> {
         self.read_async(move |context| {
             let mut inventory = Inventory {
                 available: 0,
@@ -264,9 +276,9 @@ impl PetstoreDb {
         })
     }
 
-    pub fn add_order(&self, mut order: Order) -> DbFuture<u64> {
+    pub fn add_order(&self, mut order: Order) -> DbResult<u64> {
         if order.status.is_some() {
-            return err_future(InvalidInput("New order should not contain an ID".into()));
+            return Err(InvalidInput("New order should not contain an ID".into()));
         }
         self.write_async(move |context| {
             let new_id = if context.orders.is_empty() {
@@ -280,7 +292,7 @@ impl PetstoreDb {
         })
     }
 
-    pub fn delete_order(&self, id: u64) -> DbFuture<bool> {
+    pub fn delete_order(&self, id: u64) -> DbResult<bool> {
         self.write_async(move |context| {
             if context.orders.contains_key(&id) {
                 context.orders.remove(&id);
@@ -291,38 +303,24 @@ impl PetstoreDb {
         })
     }
 
-    pub fn find_order(&self, id: u64) -> DbFuture<Option<Order>> {
+    pub fn find_order(&self, id: u64) -> DbResult<Option<Order>> {
         self.read_async(move |context| Ok(context.orders.get(&id).cloned()))
     }
 
-    pub fn add_user(&self, mut new_user: User) -> DbFuture<String> {
-        if new_user.id.is_some() {
-            return err_future(InvalidInput("New user should not contain an ID".into()));
-        }
+    pub fn add_user(&self, new_user: User) -> DbResult<String> {
+        self.write_async(move |context| context.add_user(new_user))
+    }
+
+    pub fn add_users(&self, users: Vec<User>) -> DbResult<Vec<String>> {
         self.write_async(move |context| {
-            let new_username = new_user.username.clone();
-            if context
-                .users
-                .values()
-                .any(|user| user.username == new_username)
-            {
-                return Err(RedundantUserName(format!(
-                    "Username {} is already taken",
-                    new_user.username
-                )));
-            }
-            let new_id = if context.users.is_empty() {
-                0
-            } else {
-                context.users.keys().map(|id| *id).max().unwrap_or(0) + 1
-            };
-            new_user.id = Some(new_id);
-            context.users.insert(new_id, new_user);
-            Ok(new_username)
+            users
+                .into_iter()
+                .map(move |new_user| context.add_user(new_user))
+                .collect()
         })
     }
 
-    pub fn get_user(&self, name: String) -> DbFuture<Option<User>> {
+    pub fn get_user(&self, name: String) -> DbResult<Option<User>> {
         self.read_async(move |context| {
             Ok(context
                 .users
@@ -332,7 +330,7 @@ impl PetstoreDb {
         })
     }
 
-    pub fn delete_user(&self, name: String) -> DbFuture<()> {
+    pub fn delete_user(&self, name: String) -> DbResult<()> {
         self.write_async(move |context| {
             if let Some(id) = context
                 .users
@@ -346,7 +344,7 @@ impl PetstoreDb {
         })
     }
 
-    pub fn update_user(&self, mut updated_user: User) -> DbFuture<User> {
+    pub fn update_user(&self, mut updated_user: User) -> DbResult<User> {
         self.write_async(move |context| {
             if let Some(user) = context
                 .users
