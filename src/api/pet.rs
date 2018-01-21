@@ -1,9 +1,10 @@
 use finchers::{Endpoint, Handler};
 use finchers::contrib::urlencoded::{self, FromUrlEncoded};
-
 use model::{Pet, Status};
-use error::Error;
-use petstore::Petstore;
+use error::EndpointError;
+use petstore::{Petstore, PetstoreError};
+use self::Request::*;
+use self::Response::*;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Request {
@@ -91,9 +92,6 @@ pub enum Response {
     PetDeleted,
 }
 
-use self::Request::*;
-use self::Response::*;
-
 mod imp {
     use super::*;
     use api::common::*;
@@ -111,7 +109,7 @@ mod imp {
 }
 
 // TODO: upload image
-pub fn endpoint() -> impl Endpoint<Item = Request, Error = Error> + Clone + 'static {
+pub fn endpoint() -> impl Endpoint<Item = Request, Error = EndpointError> + Clone + 'static {
     use finchers::endpoint::prelude::*;
     use finchers::contrib::json::json_body;
     use finchers::contrib::urlencoded::{queries_req, Form};
@@ -125,37 +123,27 @@ pub fn endpoint() -> impl Endpoint<Item = Request, Error = Error> + Clone + 'sta
             .with(queries_req())
             .map(FindPetsByStatuses),
         get("findByTags").with(queries_req()).map(FindPetsByTags),
-        post((path().from_err::<Error>(), body().from_err())).map(|(id, Form(param))| UpdatePetViaForm(id, param))
+        post((path().from_err::<EndpointError>(), body().from_err()))
+            .map(|(id, Form(param))| UpdatePetViaForm(id, param))
     ])
 }
 
 impl Handler<Request> for Petstore {
     type Item = Response;
-    type Error = Error;
+    type Error = PetstoreError;
     type Result = Result<Option<Self::Item>, Self::Error>;
 
     fn call(&self, request: Request) -> Self::Result {
         match request {
-            GetPet(id) => self.get_pet(id)
-                .map_err(Error::database)
-                .map(|p| p.map(ThePet)),
-            AddPet(pet) => self.add_pet(pet)
-                .map_err(Error::database)
-                .map(|id| Some(PetCreated(id))),
-            UpdatePet(pet) => self.update_pet(pet)
-                .map_err(Error::database)
-                .map(|pet| Some(ThePet(pet))),
-            DeletePet(id) => self.delete_pet(id)
-                .map_err(Error::database)
-                .map(|_| Some(PetDeleted)),
+            GetPet(id) => self.get_pet(id).map(|p| p.map(ThePet)),
+            AddPet(pet) => self.add_pet(pet).map(|id| Some(PetCreated(id))),
+            UpdatePet(pet) => self.update_pet(pet).map(|pet| Some(ThePet(pet))),
+            DeletePet(id) => self.delete_pet(id).map(|_| Some(PetDeleted)),
             FindPetsByStatuses(param) => self.get_pets_by_status(param.status)
-                .map_err(Error::database)
                 .map(|pets| Some(Pets(pets))),
             FindPetsByTags(param) => self.find_pets_by_tag(param.tags)
-                .map_err(Error::database)
                 .map(|pets| Some(Pets(pets))),
             UpdatePetViaForm(id, param) => self.update_pet_name_status(id, param.name, param.status)
-                .map_err(Error::database)
                 .map(|pet| Some(ThePet(pet))),
         }
     }

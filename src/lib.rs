@@ -1,6 +1,10 @@
 #![feature(conservative_impl_trait)]
 
 #[macro_use]
+extern crate derive_more;
+#[macro_use]
+extern crate error_chain;
+#[macro_use]
 extern crate finchers;
 extern crate futures;
 extern crate serde;

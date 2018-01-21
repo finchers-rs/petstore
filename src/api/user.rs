@@ -1,8 +1,8 @@
 use finchers::{Endpoint, Handler};
 
-use error::Error;
+use error::EndpointError;
 use model::User;
-use petstore::Petstore;
+use petstore::{Petstore, PetstoreError};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Request {
@@ -40,7 +40,7 @@ mod imp {
     }
 }
 
-pub fn endpoint() -> impl Endpoint<Item = Request, Error = Error> + Clone + 'static {
+pub fn endpoint() -> impl Endpoint<Item = Request, Error = EndpointError> + Clone + 'static {
     use finchers::endpoint::prelude::*;
     use finchers::contrib::json::json_body;
 
@@ -60,26 +60,16 @@ pub fn endpoint() -> impl Endpoint<Item = Request, Error = Error> + Clone + 'sta
 
 impl Handler<Request> for Petstore {
     type Item = Response;
-    type Error = Error;
+    type Error = PetstoreError;
     type Result = Result<Option<Self::Item>, Self::Error>;
 
     fn call(&self, request: Request) -> Self::Result {
         match request {
-            AddUser(new_user) => self.add_user(new_user)
-                .map_err(Error::database)
-                .map(|u| Some(UserCreated(u))),
-            AddUsersViaList(users) => self.add_users(users)
-                .map_err(Error::database)
-                .map(|u| Some(UsersCreated(u))),
-            DeleteUser(name) => self.delete_user(name)
-                .map_err(Error::database)
-                .map(|_| Some(UserDeleted)),
-            GetUser(name) => self.get_user(name)
-                .map_err(Error::database)
-                .map(|u| u.map(TheUser)),
-            UpdateUser(user) => self.update_user(user)
-                .map_err(Error::database)
-                .map(|user| Some(TheUser(user))),
+            AddUser(new_user) => self.add_user(new_user).map(|u| Some(UserCreated(u))),
+            AddUsersViaList(users) => self.add_users(users).map(|u| Some(UsersCreated(u))),
+            DeleteUser(name) => self.delete_user(name).map(|_| Some(UserDeleted)),
+            GetUser(name) => self.get_user(name).map(|u| u.map(TheUser)),
+            UpdateUser(user) => self.update_user(user).map(|user| Some(TheUser(user))),
         }
     }
 }

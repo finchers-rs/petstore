@@ -1,8 +1,9 @@
 use finchers::{Endpoint, Handler};
-
-use error::Error;
+use error::EndpointError;
 use model::{Inventory, Order};
-use petstore::Petstore;
+use petstore::{Petstore, PetstoreError};
+use self::Request::*;
+use self::Response::*;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Request {
@@ -20,9 +21,6 @@ pub enum Response {
     OrderDeleted(bool),
 }
 
-use self::Request::*;
-use self::Response::*;
-
 mod imp {
     use super::*;
     use api::common::*;
@@ -39,14 +37,14 @@ mod imp {
     }
 }
 
-pub fn endpoint() -> impl Endpoint<Item = Request, Error = Error> + Clone + 'static {
+pub fn endpoint() -> impl Endpoint<Item = Request, Error = EndpointError> + Clone + 'static {
     use finchers::endpoint::prelude::*;
     use finchers::endpoint::ok;
     use finchers::contrib::json::json_body;
 
     endpoint("store").with(choice![
-        get("inventory").with(ok::<_, Error>(GetInventory)),
-        endpoint::<_, _, Error>("order").with(choice![
+        get("inventory").with(ok::<_, EndpointError>(GetInventory)),
+        endpoint::<_, _, EndpointError>("order").with(choice![
             post(json_body()).map(AddOrder),
             delete(path()).map(DeleteOrder),
             get(path()).map(FindOrder),
@@ -56,23 +54,16 @@ pub fn endpoint() -> impl Endpoint<Item = Request, Error = Error> + Clone + 'sta
 
 impl Handler<Request> for Petstore {
     type Item = Response;
-    type Error = Error;
+    type Error = PetstoreError;
     type Result = Result<Option<Self::Item>, Self::Error>;
 
     fn call(&self, request: Request) -> Self::Result {
         match request {
-            GetInventory => self.get_inventory()
-                .map_err(Error::database)
-                .map(|i| Some(TheInventory(i))),
-            AddOrder(order) => self.add_order(order)
-                .map_err(Error::database)
-                .map(|id| Some(OrderCreated(id))),
+            GetInventory => self.get_inventory().map(|i| Some(TheInventory(i))),
+            AddOrder(order) => self.add_order(order).map(|id| Some(OrderCreated(id))),
             DeleteOrder(id) => self.delete_order(id)
-                .map_err(Error::database)
                 .map(|deleted| Some(OrderDeleted(deleted))),
-            FindOrder(id) => self.find_order(id)
-                .map_err(Error::database)
-                .map(|o| o.map(TheOrder)),
+            FindOrder(id) => self.find_order(id).map(|o| o.map(TheOrder)),
         }
     }
 }

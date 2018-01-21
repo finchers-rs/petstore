@@ -55,6 +55,6 @@ impl Handler<Request> for Petstore {
             Pet(pet) => self.call(pet).map(|r| r.map(Response::Pet)),
             Store(store) => self.call(store).map(|r| r.map(Response::Store)),
             User(user) => self.call(user).map(|r| r.map(Response::User)),
-        }
+        }.map_err(Into::into)
     }
 }
