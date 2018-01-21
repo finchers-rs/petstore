@@ -14,7 +14,7 @@ pub enum Request {
     DeletePet(u64),
     FindPetsByStatuses(FindPetsByStatusesParam),
     FindPetsByTags(FindPetsByTagsParam),
-    UpdatePetViaForm(u64, UpdatePetParam),
+    // UpdatePetViaForm(u64, UpdatePetParam),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -123,8 +123,8 @@ pub fn endpoint() -> impl Endpoint<Item = Request, Error = EndpointError> + Clon
             .with(queries_req())
             .map(FindPetsByStatuses),
         get("findByTags").with(queries_req()).map(FindPetsByTags),
-        post((path().from_err::<EndpointError>(), body().from_err()))
-            .map(|(id, Form(param))| UpdatePetViaForm(id, param))
+        //post((path().from_err::<EndpointError>(), body().from_err()))
+        //    .map(|(id, Form(param))| UpdatePetViaForm(id, param))
     ])
 }
 
@@ -143,8 +143,6 @@ impl Handler<Request> for Petstore {
                 .map(|pets| Some(Pets(pets))),
             FindPetsByTags(param) => self.find_pets_by_tag(param.tags)
                 .map(|pets| Some(Pets(pets))),
-            UpdatePetViaForm(id, param) => self.update_pet_name_status(id, param.name, param.status)
-                .map(|pet| Some(ThePet(pet))),
         }
     }
 }
