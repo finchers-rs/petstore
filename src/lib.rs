@@ -8,11 +8,9 @@ extern crate serde;
 extern crate serde_derive;
 extern crate serde_json;
 
-mod db;
-mod error;
-mod petstore;
-mod model;
-
 pub mod api;
-pub use db::PetstoreDb;
+pub mod error;
+pub mod petstore;
+pub mod model;
+
 pub use petstore::Petstore;

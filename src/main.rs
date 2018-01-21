@@ -11,11 +11,11 @@ use hyper::server::{Http, NewService};
 use tokio_core::reactor::Core;
 
 fn main() {
-    let db = petstore::PetstoreDb::new();
+    let petstore = petstore::Petstore::new();
 
     let service = FinchersService::new(
         petstore::api::endpoint(),
-        petstore::Petstore::new(db),
+        petstore,
         DefaultResponder::default(),
     );
 

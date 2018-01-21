@@ -65,24 +65,19 @@ impl Handler<Request> for Petstore {
 
     fn call(&self, request: Request) -> Self::Result {
         match request {
-            AddUser(new_user) => self.database()
-                .add_user(new_user)
+            AddUser(new_user) => self.add_user(new_user)
                 .map_err(Error::database)
                 .map(|u| Some(UserCreated(u))),
-            AddUsersViaList(users) => self.database()
-                .add_users(users)
+            AddUsersViaList(users) => self.add_users(users)
                 .map_err(Error::database)
                 .map(|u| Some(UsersCreated(u))),
-            DeleteUser(name) => self.database()
-                .delete_user(name)
+            DeleteUser(name) => self.delete_user(name)
                 .map_err(Error::database)
                 .map(|_| Some(UserDeleted)),
-            GetUser(name) => self.database()
-                .get_user(name)
+            GetUser(name) => self.get_user(name)
                 .map_err(Error::database)
                 .map(|u| u.map(TheUser)),
-            UpdateUser(user) => self.database()
-                .update_user(user)
+            UpdateUser(user) => self.update_user(user)
                 .map_err(Error::database)
                 .map(|user| Some(TheUser(user))),
         }

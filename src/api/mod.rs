@@ -1,10 +1,9 @@
-mod common;
-mod pet;
-mod store;
-mod user;
+pub mod common;
+pub mod pet;
+pub mod store;
+pub mod user;
 
 use finchers::{Endpoint, Handler};
-
 use error::Error;
 use petstore::Petstore;
 

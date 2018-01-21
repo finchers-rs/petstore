@@ -136,32 +136,25 @@ impl Handler<Request> for Petstore {
 
     fn call(&self, request: Request) -> Self::Result {
         match request {
-            GetPet(id) => self.database()
-                .get_pet(id)
+            GetPet(id) => self.get_pet(id)
                 .map_err(Error::database)
                 .map(|p| p.map(ThePet)),
-            AddPet(pet) => self.database()
-                .add_pet(pet)
+            AddPet(pet) => self.add_pet(pet)
                 .map_err(Error::database)
                 .map(|id| Some(PetCreated(id))),
-            UpdatePet(pet) => self.database()
-                .update_pet(pet)
+            UpdatePet(pet) => self.update_pet(pet)
                 .map_err(Error::database)
                 .map(|pet| Some(ThePet(pet))),
-            DeletePet(id) => self.database()
-                .delete_pet(id)
+            DeletePet(id) => self.delete_pet(id)
                 .map_err(Error::database)
                 .map(|_| Some(PetDeleted)),
-            FindPetsByStatuses(param) => self.database()
-                .get_pets_by_status(param.status)
+            FindPetsByStatuses(param) => self.get_pets_by_status(param.status)
                 .map_err(Error::database)
                 .map(|pets| Some(Pets(pets))),
-            FindPetsByTags(param) => self.database()
-                .find_pets_by_tag(param.tags)
+            FindPetsByTags(param) => self.find_pets_by_tag(param.tags)
                 .map_err(Error::database)
                 .map(|pets| Some(Pets(pets))),
-            UpdatePetViaForm(id, param) => self.database()
-                .update_pet_name_status(id, param.name, param.status)
+            UpdatePetViaForm(id, param) => self.update_pet_name_status(id, param.name, param.status)
                 .map_err(Error::database)
                 .map(|pet| Some(ThePet(pet))),
         }

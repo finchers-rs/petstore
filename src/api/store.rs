@@ -61,20 +61,16 @@ impl Handler<Request> for Petstore {
 
     fn call(&self, request: Request) -> Self::Result {
         match request {
-            GetInventory => self.database()
-                .get_inventory()
+            GetInventory => self.get_inventory()
                 .map_err(Error::database)
                 .map(|i| Some(TheInventory(i))),
-            AddOrder(order) => self.database()
-                .add_order(order)
+            AddOrder(order) => self.add_order(order)
                 .map_err(Error::database)
                 .map(|id| Some(OrderCreated(id))),
-            DeleteOrder(id) => self.database()
-                .delete_order(id)
+            DeleteOrder(id) => self.delete_order(id)
                 .map_err(Error::database)
                 .map(|deleted| Some(OrderDeleted(deleted))),
-            FindOrder(id) => self.database()
-                .find_order(id)
+            FindOrder(id) => self.find_order(id)
                 .map_err(Error::database)
                 .map(|o| o.map(TheOrder)),
         }

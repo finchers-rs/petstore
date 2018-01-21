@@ -1,6 +1,6 @@
 use std::error::Error as StdError;
 use finchers::http::{header, IntoResponse, Response, StatusCode};
-use db::DbError;
+use petstore::DbError;
 
 #[derive(Debug)]
 pub enum Error {
