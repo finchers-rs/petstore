@@ -1,4 +1,5 @@
 use finchers::{Endpoint, Handler};
+use finchers::contrib::urlencoded::serde::from_csv;
 use model::{Pet, Status};
 use error::EndpointError;
 use petstore::{Petstore, PetstoreError};
@@ -18,53 +19,18 @@ pub enum Request {
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct FindPetsByStatusesParam {
-    #[serde(deserialize_with = "serde::parse_statuses")] pub status: Vec<Status>,
+    #[serde(deserialize_with = "from_csv")] pub status: Vec<Status>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct FindPetsByTagsParam {
-    #[serde(deserialize_with = "serde::parse_strings")] pub tags: Vec<String>,
+    #[serde(deserialize_with = "from_csv")] pub tags: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct UpdatePetParam {
     pub name: Option<String>,
-    #[serde(deserialize_with = "serde::parse_status_option")] pub status: Option<Status>,
-}
-
-mod serde {
-    use model::Status;
-    use serde::{self, Deserialize, Deserializer};
-
-    pub fn parse_statuses<'de, D>(de: D) -> Result<Vec<Status>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(de)?;
-        let status = s.split(",")
-            .map(|s| s.parse().map_err(serde::de::Error::custom))
-            .collect::<Result<_, _>>()?;
-        Ok(status)
-    }
-
-    pub fn parse_strings<'de, D>(de: D) -> Result<Vec<String>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(de)?;
-        let strs = s.split(",").map(ToOwned::to_owned).collect();
-        Ok(strs)
-    }
-
-    pub fn parse_status_option<'de, D>(de: D) -> Result<Option<Status>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s: Option<String> = Deserialize::deserialize(de)?;
-        s.map_or(Ok(None), |s| {
-            s.parse().map(Some).map_err(serde::de::Error::custom)
-        })
-    }
+    pub status: Option<Status>,
 }
 
 #[derive(Debug)]
