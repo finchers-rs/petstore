@@ -26,6 +26,7 @@ pub struct Order {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum OrderStatus {
     Placed,
     Approved,
@@ -72,6 +73,7 @@ pub struct Pet {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Status {
     Available,
     Pending,

@@ -1,5 +1,4 @@
 use finchers::{Endpoint, Handler};
-use finchers::contrib::urlencoded::{self, FromUrlEncoded};
 use model::{Pet, Status};
 use error::EndpointError;
 use petstore::{Petstore, PetstoreError};
@@ -17,70 +16,54 @@ pub enum Request {
     UpdatePetViaForm(u64, UpdatePetParam),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct FindPetsByStatusesParam {
-    pub status: Vec<Status>,
+    #[serde(deserialize_with = "serde::parse_statuses")] pub status: Vec<Status>,
 }
 
-impl FromUrlEncoded for FindPetsByStatusesParam {
-    fn from_urlencoded(iter: urlencoded::Parse) -> Result<Self, urlencoded::UrlDecodeError> {
-        let mut status = None;
-        for (key, value) in iter {
-            match &*key {
-                "status" => {
-                    status = Some(value
-                        .split(",")
-                        .map(|s| s.parse())
-                        .collect::<Result<_, _>>()
-                        .map_err(urlencoded::UrlDecodeError::other)?)
-                }
-                s => return Err(urlencoded::UrlDecodeError::invalid_key(s.to_string())),
-            }
-        }
-        Ok(FindPetsByStatusesParam {
-            status: status.ok_or_else(|| urlencoded::UrlDecodeError::missing_key("status"))?,
-        })
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct FindPetsByTagsParam {
-    pub tags: Vec<String>,
+    #[serde(deserialize_with = "serde::parse_strings")] pub tags: Vec<String>,
 }
 
-impl FromUrlEncoded for FindPetsByTagsParam {
-    fn from_urlencoded(iter: urlencoded::Parse) -> Result<Self, urlencoded::UrlDecodeError> {
-        let mut tags = None;
-        for (key, value) in iter {
-            match &*key {
-                "tags" => tags = Some(value.split(",").map(ToOwned::to_owned).collect()),
-                s => return Err(urlencoded::UrlDecodeError::invalid_key(s.to_string())),
-            }
-        }
-        Ok(FindPetsByTagsParam {
-            tags: tags.ok_or_else(|| urlencoded::UrlDecodeError::missing_key("tags"))?,
-        })
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct UpdatePetParam {
     pub name: Option<String>,
-    pub status: Option<Status>,
+    #[serde(deserialize_with = "serde::parse_status_option")] pub status: Option<Status>,
 }
 
-impl FromUrlEncoded for UpdatePetParam {
-    fn from_urlencoded(iter: urlencoded::Parse) -> Result<Self, urlencoded::UrlDecodeError> {
-        let mut name = None;
-        let mut status = None;
-        for (key, value) in iter {
-            match &*key {
-                "name" => name = Some(value.into_owned()),
-                "status" => status = Some(value.parse().map_err(urlencoded::UrlDecodeError::other)?),
-                s => return Err(urlencoded::UrlDecodeError::invalid_key(s.to_string())),
-            }
-        }
-        Ok(UpdatePetParam { name, status })
+mod serde {
+    use model::Status;
+    use serde::{self, Deserialize, Deserializer};
+
+    pub fn parse_statuses<'de, D>(de: D) -> Result<Vec<Status>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(de)?;
+        let status = s.split(",")
+            .map(|s| s.parse().map_err(serde::de::Error::custom))
+            .collect::<Result<_, _>>()?;
+        Ok(status)
+    }
+
+    pub fn parse_strings<'de, D>(de: D) -> Result<Vec<String>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(de)?;
+        let strs = s.split(",").map(ToOwned::to_owned).collect();
+        Ok(strs)
+    }
+
+    pub fn parse_status_option<'de, D>(de: D) -> Result<Option<Status>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s: Option<String> = Deserialize::deserialize(de)?;
+        s.map_or(Ok(None), |s| {
+            s.parse().map(Some).map_err(serde::de::Error::custom)
+        })
     }
 }
 
@@ -112,7 +95,7 @@ mod imp {
 pub fn endpoint() -> impl Endpoint<Item = Request, Error = EndpointError> + Clone + 'static {
     use finchers::endpoint::prelude::*;
     use finchers::contrib::json::json_body;
-    use finchers::contrib::urlencoded::{queries_req, Form};
+    use finchers::contrib::urlencoded::serde::{queries_req, Form};
 
     endpoint("pet").with(choice![
         get(path()).map(GetPet),
