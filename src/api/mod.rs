@@ -7,7 +7,7 @@ use finchers::{Endpoint, Handler};
 use error::Error;
 use petstore::Petstore;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum Request {
     Pet(pet::Request),
     Store(store::Request),

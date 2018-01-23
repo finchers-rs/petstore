@@ -44,11 +44,13 @@ pub fn endpoint() -> impl Endpoint<Item = Request, Error = EndpointError> + Clon
 
     endpoint("store").with(choice![
         get("inventory").with(ok::<_, EndpointError>(GetInventory)),
-        endpoint::<_, _, EndpointError>("order").with(choice![
-            post(json_body()).map(AddOrder),
-            delete(path()).map(DeleteOrder),
-            get(path()).map(FindOrder),
-        ]),
+        endpoint("order")
+            .assert_types::<_, EndpointError>()
+            .with(choice![
+                post(json_body()).map(AddOrder),
+                delete(path()).map(DeleteOrder),
+                get(path()).map(FindOrder),
+            ]),
     ])
 }
 

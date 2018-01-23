@@ -4,7 +4,7 @@ use error::EndpointError;
 use model::User;
 use petstore::{Petstore, PetstoreError};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum Request {
     AddUser(User),
     AddUsersViaList(Vec<User>),

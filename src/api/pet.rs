@@ -1,36 +1,21 @@
 use finchers::{Endpoint, Handler};
-use finchers::contrib::urlencoded::serde::from_csv;
 use model::{Pet, Status};
 use error::EndpointError;
 use petstore::{Petstore, PetstoreError};
 use self::Request::*;
 use self::Response::*;
 
-#[derive(Debug, Clone, PartialEq)]
+// TODO: upload image via multipart
+
+#[derive(Debug, PartialEq)]
 pub enum Request {
     GetPet(u64),
     AddPet(Pet),
     UpdatePet(Pet),
     DeletePet(u64),
-    FindPetsByStatuses(FindPetsByStatusesParam),
-    FindPetsByTags(FindPetsByTagsParam),
-    UpdatePetViaForm(u64, UpdatePetParam),
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize)]
-pub struct FindPetsByStatusesParam {
-    #[serde(deserialize_with = "from_csv")] pub status: Vec<Status>,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize)]
-pub struct FindPetsByTagsParam {
-    #[serde(deserialize_with = "from_csv")] pub tags: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize)]
-pub struct UpdatePetParam {
-    pub name: Option<String>,
-    pub status: Option<Status>,
+    FindPetsByStatuses(Vec<Status>),
+    FindPetsByTags(Vec<String>),
+    UpdatePetViaForm(u64, Option<String>, Option<Status>),
 }
 
 #[derive(Debug)]
@@ -57,11 +42,26 @@ mod imp {
     }
 }
 
-// TODO: upload image
 pub fn endpoint() -> impl Endpoint<Item = Request, Error = EndpointError> + Clone + 'static {
     use finchers::endpoint::prelude::*;
     use finchers::contrib::json::json_body;
-    use finchers::contrib::urlencoded::serde::{queries_req, Form};
+    use finchers::contrib::urlencoded::serde::{from_csv, queries_req, Form};
+
+    #[derive(Debug, PartialEq, Deserialize)]
+    pub struct FindPetsByStatusesParam {
+        #[serde(deserialize_with = "from_csv")] pub status: Vec<Status>,
+    }
+
+    #[derive(Debug, PartialEq, Deserialize)]
+    pub struct FindPetsByTagsParam {
+        #[serde(deserialize_with = "from_csv")] pub tags: Vec<String>,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Deserialize)]
+    pub struct UpdatePetParam {
+        pub name: Option<String>,
+        pub status: Option<Status>,
+    }
 
     endpoint("pet").with(choice![
         get(path()).map(GetPet),
@@ -70,10 +70,12 @@ pub fn endpoint() -> impl Endpoint<Item = Request, Error = EndpointError> + Clon
         delete(path()).map(DeletePet),
         get("findByStatus")
             .with(queries_req())
-            .map(FindPetsByStatuses),
-        get("findByTags").with(queries_req()).map(FindPetsByTags),
+            .map(|FindPetsByStatusesParam { status }| FindPetsByStatuses(status)),
+        get("findByTags")
+            .with(queries_req())
+            .map(|FindPetsByTagsParam { tags }| FindPetsByTags(tags)),
         post((path().from_err::<EndpointError>(), body().from_err()))
-            .map(|(id, Form(param))| UpdatePetViaForm(id, param))
+            .map(|(id, Form(UpdatePetParam { name, status }))| UpdatePetViaForm(id, name, status))
     ])
 }
 
@@ -88,11 +90,9 @@ impl Handler<Request> for Petstore {
             AddPet(pet) => self.add_pet(pet).map(|id| Some(PetCreated(id))),
             UpdatePet(pet) => self.update_pet(pet).map(|pet| Some(ThePet(pet))),
             DeletePet(id) => self.delete_pet(id).map(|_| Some(PetDeleted)),
-            FindPetsByStatuses(param) => self.get_pets_by_status(param.status)
-                .map(|pets| Some(Pets(pets))),
-            FindPetsByTags(param) => self.find_pets_by_tag(param.tags)
-                .map(|pets| Some(Pets(pets))),
-            UpdatePetViaForm(id, param) => self.update_pet_name_status(id, param.name, param.status)
+            FindPetsByStatuses(status) => self.get_pets_by_status(status).map(|pets| Some(Pets(pets))),
+            FindPetsByTags(tags) => self.find_pets_by_tag(tags).map(|pets| Some(Pets(pets))),
+            UpdatePetViaForm(id, name, status) => self.update_pet_name_status(id, name, status)
                 .map(|pet| Some(ThePet(pet))),
         }
     }
@@ -123,9 +123,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             endpoint().run(request).map(|r| r.unwrap()),
-            Some(FindPetsByStatuses(FindPetsByStatusesParam {
-                status: vec![Available, Adopted],
-            }))
+            Some(FindPetsByStatuses(vec![Available, Adopted]))
         );
     }
 
@@ -136,9 +134,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             endpoint().run(request).map(|r| r.unwrap()),
-            Some(FindPetsByTags(FindPetsByTagsParam {
-                tags: vec!["cat".into(), "cute".into()],
-            }))
+            Some(FindPetsByTags(vec!["cat".into(), "cute".into()])),
         );
     }
 
@@ -149,13 +145,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             endpoint().run(request).map(|r| r.unwrap()),
-            Some(UpdatePetViaForm(
-                42,
-                UpdatePetParam {
-                    name: Some("Alice".into()),
-                    status: Some(Available),
-                }
-            ))
+            Some(UpdatePetViaForm(42, Some("Alice".into()), Some(Available),))
         );
     }
 }
