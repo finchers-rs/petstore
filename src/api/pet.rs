@@ -44,8 +44,8 @@ mod imp {
 
 pub fn endpoint() -> impl Endpoint<Item = Request, Error = EndpointError> + Clone + 'static {
     use finchers::endpoint::prelude::*;
-    use finchers::contrib::json::json_body;
-    use finchers::contrib::urlencoded::serde::{from_csv, queries_req, Form};
+    use finchers_json::json_body;
+    use finchers_urlencoded::serde::{from_csv, queries_req, Form};
 
     #[derive(Debug, PartialEq, Deserialize)]
     pub struct FindPetsByStatusesParam {
@@ -65,16 +65,16 @@ pub fn endpoint() -> impl Endpoint<Item = Request, Error = EndpointError> + Clon
 
     endpoint("pet").with(choice![
         get(path()).map(GetPet),
-        post(json_body()).map(AddPet),
-        put(json_body()).map(UpdatePet),
+        post(json_body().from_err()).map(AddPet),
+        put(json_body().from_err()).map(UpdatePet),
         delete(path()).map(DeletePet),
         get("findByStatus")
-            .with(queries_req())
+            .with(queries_req().from_err())
             .map(|FindPetsByStatusesParam { status }| FindPetsByStatuses(status)),
         get("findByTags")
-            .with(queries_req())
+            .with(queries_req().from_err())
             .map(|FindPetsByTagsParam { tags }| FindPetsByTags(tags)),
-        post((path().from_err::<EndpointError>(), body().from_err()))
+        post((path(), body().from_err()))
             .map(|(id, Form(UpdatePetParam { name, status }))| UpdatePetViaForm(id, name, status))
     ])
 }

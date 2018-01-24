@@ -42,18 +42,18 @@ mod imp {
 
 pub fn endpoint() -> impl Endpoint<Item = Request, Error = EndpointError> + Clone + 'static {
     use finchers::endpoint::prelude::*;
-    use finchers::contrib::json::json_body;
+    use finchers_json::json_body;
 
     endpoint("user").with(choice![
         get(path()).map(GetUser),
         delete(path()).map(DeleteUser),
-        post(json_body()).map(AddUser),
-        put(json_body()).map(UpdateUser),
+        post(json_body().from_err()).map(AddUser),
+        put(json_body().from_err()).map(UpdateUser),
         post("createWithList")
-            .with(json_body())
+            .with(json_body().from_err())
             .map(AddUsersViaList),
         post("createWithArray")
-            .with(json_body())
+            .with(json_body().from_err())
             .map(AddUsersViaList),
     ])
 }

@@ -40,17 +40,15 @@ mod imp {
 pub fn endpoint() -> impl Endpoint<Item = Request, Error = EndpointError> + Clone + 'static {
     use finchers::endpoint::prelude::*;
     use finchers::endpoint::ok;
-    use finchers::contrib::json::json_body;
+    use finchers_json::json_body;
 
     endpoint("store").with(choice![
-        get("inventory").with(ok::<_, EndpointError>(GetInventory)),
-        endpoint("order")
-            .assert_types::<_, EndpointError>()
-            .with(choice![
-                post(json_body()).map(AddOrder),
-                delete(path()).map(DeleteOrder),
-                get(path()).map(FindOrder),
-            ]),
+        get("inventory").with(ok(GetInventory)),
+        endpoint("order").with(choice![
+            post(json_body().from_err()).map(AddOrder),
+            delete(path()).map(DeleteOrder),
+            get(path()).map(FindOrder),
+        ]),
     ])
 }
 

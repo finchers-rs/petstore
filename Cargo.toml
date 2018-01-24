@@ -5,6 +5,8 @@ authors = ["Yusuke Sasaki <yusuke.sasaki.nuem@gmail.com>"]
 
 [dependencies]
 finchers = { git = "https://github.com/finchers-rs/finchers.git" }
+finchers-json = { git = "https://github.com/finchers-rs/json.git" }
+finchers-urlencoded = { git = "https://github.com/finchers-rs/urlencoded.git" }
 
 derive_more = "0.7"
 error-chain = "0.11"

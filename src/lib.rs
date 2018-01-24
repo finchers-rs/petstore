@@ -6,6 +6,8 @@ extern crate derive_more;
 extern crate error_chain;
 #[macro_use]
 extern crate finchers;
+extern crate finchers_json;
+extern crate finchers_urlencoded;
 extern crate futures;
 extern crate serde;
 #[macro_use]

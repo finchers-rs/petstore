@@ -7,7 +7,7 @@ use finchers::{Endpoint, Handler};
 use error::Error;
 use petstore::Petstore;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, From)]
 pub enum Request {
     Pet(pet::Request),
     Store(store::Request),
@@ -38,9 +38,9 @@ mod imp {
 
 pub fn endpoint() -> impl Endpoint<Item = Request, Error = Error> + Clone + 'static {
     choice![
-        pet::endpoint().map(Request::Pet),
-        store::endpoint().map(Request::Store),
-        user::endpoint().map(Request::User),
+        pet::endpoint().from_ok_err(),
+        store::endpoint().from_ok_err(),
+        user::endpoint().from_ok_err(),
     ]
 }
 
