@@ -119,12 +119,12 @@ pub fn build_endpoint() -> impl Endpoint<Item = Response> + 'static {
         get("pet/findByStatus")
             .with(queries_req::<FindByStatusParam>())
             .map(|_| Dummy),
-        get("pet").with(path::<u64>()).map(|_| Dummy),
+        get("pet").with(path::<model::PetId>()).map(|_| Dummy),
         post("pet")
-            .with(path::<u64>())
+            .with(path::<model::PetId>())
             .join(form_body::<UpdatePetViaFormParam>())
             .map(|_| Dummy),
-        delete("pet").with(path::<u64>()).map(|_| Dummy),
+        delete("pet").with(path::<model::PetId>()).map(|_| Dummy),
     ];
 
     let store_api = choice![
@@ -132,8 +132,12 @@ pub fn build_endpoint() -> impl Endpoint<Item = Response> + 'static {
         post("store/order")
             .with(json_body::<model::Order>())
             .map(|_| Dummy),
-        get("store/order").with(path::<u64>()).map(|_| Dummy),
-        delete("store/order").with(path::<u64>()).map(|_| Dummy),
+        get("store/order")
+            .with(path::<model::OrderId>())
+            .map(|_| Dummy),
+        delete("store/order")
+            .with(path::<model::OrderId>())
+            .map(|_| Dummy),
     ];
 
     let user_api = choice![
