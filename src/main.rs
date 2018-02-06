@@ -4,6 +4,9 @@
 extern crate chrono;
 #[macro_use]
 extern crate derive_more;
+#[allow(unused_imports)]
+#[macro_use]
+extern crate error_chain;
 #[macro_use]
 extern crate finchers;
 extern crate finchers_json;
